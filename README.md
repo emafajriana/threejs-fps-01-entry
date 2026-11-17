@@ -1,8 +1,12 @@
+[![make.fun · best-game-01](https://make.fun/badge/best-game-01.svg)](https://make.fun/bounty/best-game-01?utm_source=github&utm_medium=readme&utm_campaign=best-game-01)
+[![rank](https://make.fun/badge/best-game-01/emafajriana/threejs-fps-01-entry/rank.svg)](https://make.fun/bounty/best-game-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=best-game-01)
+[![reward](https://make.fun/badge/best-game-01/emafajriana/threejs-fps-01-entry/reward.svg)](https://make.fun/bounty/best-game-01?utm_source=github&utm_medium=readme&utm_campaign=best-game-01)
+
 # EMBER QUAY — a round-based tactical FPS
 
 A complete Counter-Strike-style tactical shooter in three.js, built for the
-make.fun `threejs-fps-01` bounty. Single-player against bots, from static
-files — no build step, no network request.
+make.fun `best-game-01` bounty ("Make the best game"). Single-player against
+bots, from static files — no build step, no network request.
 
 ## The game
 

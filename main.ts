@@ -1,4 +1,5 @@
-// EMBER QUAY — a round-based tactical FPS for threejs-fps-01.
+// EMBER QUAY — a round-based tactical FPS, entered in make.fun's
+// best-game-01 bounty ("Make the best game", any genre).
 //
 // Build step: gather the static browser game (game/) and the staged
 // screenshots (screenshots/) into the output folder, then describe them
@@ -15,7 +16,7 @@
 import { cpSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildDossier } from "./vendor/makefun-threejs.ts";
+import { buildDossier } from "./vendor/makefun-game.ts";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const OUT = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
@@ -34,6 +35,7 @@ writeFileSync(
     screenshots: { max: 4, max_bytes: 262_144 },
     game_max_files: 993,
     game_max_bytes: 50_331_648,
+    game_path_max_bytes: 1_000,
   }),
 );
 

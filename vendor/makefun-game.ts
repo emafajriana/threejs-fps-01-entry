@@ -1,8 +1,8 @@
-// make.fun's three.js game library for Node 22: one file, the Node standard library only, erasable
+// make.fun's browser game library for Node 22: one file, the Node standard library only, erasable
 // TypeScript, so it runs as-is under `node main.ts` with no flags, no build and no install. Copy it to
-// vendor/makefun-threejs.ts in your repository (a copy anywhere else counts as lines you wrote) and import it:
+// vendor/makefun-game.ts in your repository (a copy anywhere else counts as lines you wrote) and import it:
 //
-//   import { buildDossier } from './vendor/makefun-threejs.ts';
+//   import { buildDossier } from './vendor/makefun-game.ts';
 //   writeFileSync('/output/dossier.json', buildDossier('/output', {
 //     text_max_bytes: 163840,
 //     screenshots: { max: 4, max_bytes: 262144 },
@@ -21,11 +21,11 @@
 //                               named *.min.js/*.min.mjs/*.min.css
 //   htmlFacts(html)             a page's <script>, <link>, <img>, <source>, <video>, <audio> and <iframe>
 //                               tags and its <script type="importmap"> blocks, in document order, attributes parsed
-//   importMapOf(facts)          the page's one import map, parsed (imports and scopes, a null value allowed), or why
-//                               it has none
+//   importMapOf(facts)          the page's import map, parsed (imports and scopes, a null value allowed): none when
+//                               the page has none (an import map is optional), or why one it has cannot be used
 //   isRelativeRef(ref)          whether a reference is relative: no scheme, no leading // and no leading /
 //   isRelativeSpecifier(name)   whether a module specifier is relative in JavaScript's sense (./ or ../): a bare
-//                               name such as "three" is not, whatever the import map then makes of it
+//                               name such as "phaser" is not, whatever the import map then makes of it
 //   resolveGamePath(ref, from)  the path under game/ a relative reference names, from the importing file's
 //                               path; null when the reference is not relative or climbs out of game/
 //   importMapMatch(map, name, from)
@@ -37,10 +37,11 @@
 //                               ending in / that prefixes it, a matching scope's map first; null when none or blocked
 //   sourceImports(text)         a module's static import and export-from specifiers, in source order, by a
 //                               lexical scan (the gate's own check parses the module, see below)
-//   importOrder(sources, facts) the source JS modules in the order a depth-first walk of static imports
-//                               reaches them from index.html's module scripts (inline or src), specifiers
-//                               resolved relative to the importer or through the import map, unresolvable or
-//                               unmapped bare specifiers skipped
+//   importOrder(sources, facts) the source scripts in the order the page loads them: index.html's scripts in
+//                               document order, a classic <script src> where it stands, a module script (inline
+//                               or src) followed by a depth-first walk of its static imports, specifiers resolved
+//                               relative to the importer or through the import map, unresolvable or unmapped bare
+//                               specifiers skipped
 //   canonicalJson(value)        JSON with sorted keys and no spaces: one spelling per value
 //   buildDossier(dir, caps)     the dossier (makefun/dossier/v1) of an entry directory, as canonical JSON bytes
 //
@@ -51,16 +52,19 @@
 // directories counted alike, grader/program.ts MAX_OUTPUT_FILES), and game/ counts alongside its entries, with
 // screenshots/ and its 4 files and dossier.json, so 993 game entries plus those make 1000.
 //
-// An entry hands in game/ (the playable game as static files the browser loads: game/index.html required, one
-// <script type="importmap"> mapping "three" to the game-relative path of three.js 0.187.0's module, its
-// three.core.min.js beside it, and the game's own modules) and screenshots/ (3 or 4 PNG or JPEG renders of the
-// game, the first by name the cover). Nothing of either is read over the network.
+// An entry hands in game/ (the playable game as static files a desktop browser loads offline: game/index.html
+// required, the game's own scripts, styles and assets, and any library it uses vendored under game/, three.js,
+// Phaser, PixiJS or a WebAssembly build alike, or none; an import map is optional and may map any bare specifier to
+// a file of game/) and screenshots/ (3 or 4 PNG or JPEG renders of the game, the first by name the cover). Nothing
+// of either is read over the network.
 //
-// The dossier's text is a "## Game" block and then the sources: index.html first, then the source JS modules in
-// importOrder's depth-first order, then every other source file by path. A source file is one under game/ with
-// extension .html, .js, .mjs, .css, .glsl, .vert, .frag, .wgsl or .json, not under a directory named vendor and
-// not named *.min.js, *.min.mjs or *.min.css; every other file is listed in the Game block (vendored files by
-// path and bytes, assets by extension with counts and bytes), never in the text. Each source follows a header
+// The dossier's text is a "## Game" block (the source, vendored and asset counts and the totals) and then the
+// sources: index.html first, then the source scripts in importOrder's order (the page's classic scripts and module
+// scripts in document order, each module followed by its static imports depth first), then every other source file
+// by path. A source file is one under game/ with extension .html, .js, .mjs, .css, .glsl, .vert, .frag, .wgsl or
+// .json, not under a directory named vendor and not named *.min.js, *.min.mjs or *.min.css; every other file (a
+// library under vendor/ or minified, an image, a sound, a .wasm build) is listed in the Game block (vendored files
+// by path and bytes, assets by extension with counts and bytes), never in the text. Each source follows a header
 // line naming its path, lines and bytes and then its text in a fence. The text holds at most caps.text_max_bytes
 // UTF-8 bytes: every source that fits goes in whole, in that order; the first that does not goes in up to its last
 // complete line that fits (its fence closed, then a line naming how many of its lines are not shown), or not at
@@ -88,11 +92,6 @@ export const DOSSIER_SCHEMA = 'makefun/dossier/v1';
 export const DOSSIER_MAX_BYTES = 4 * 1024 * 1024;
 /** The most images a dossier holds (contracts/dossier.ts DOSSIER_MAX_IMAGES). */
 export const DOSSIER_MAX_IMAGES = 8;
-/** The three.js release the kit ships, whose module the import map maps "three" to. */
-export const THREE_VERSION = '0.187.0';
-/** The names the kit's three.js module and its core sit under, inside game/. */
-export const THREE_MODULE_FILE = 'three.module.min.js';
-export const THREE_CORE_FILE = 'three.core.min.js';
 /** The game's page: the one file game/ must hold. */
 export const INDEX_HTML = 'index.html';
 /** The most bytes game/index.html may be. */
@@ -164,7 +163,7 @@ export interface GameTree {
 /**
  * What buildDossier is held to: the text's cap in UTF-8 bytes, the screenshot caps (at most `max` images, each at
  * most `max_bytes` bytes; the dossier's own DOSSIER_MAX_IMAGES and DOSSIER_MAX_BYTES hold either way) and
- * readGameTree's caps. A bounty's gate.json may be passed whole: buildDossier reads only these keys (threejs-fps-01's
+ * readGameTree's caps. A bounty's gate.json may be passed whole: buildDossier reads only these keys (best-game-01's
  * gate names them text_max_bytes, screenshots, game_max_files, game_max_bytes and game_path_max_bytes).
  */
 export interface DossierCaps {
@@ -527,7 +526,10 @@ export interface ImportMap {
   scopes: Record<string, Record<string, string | null>>;
 }
 
-/** A page's one import map, or why it has none: `map` is null when `error` says why. */
+/**
+ * A page's one import map, or none: `map` and `error` both null when the page holds no import map (it is optional),
+ * `map` null and `error` saying why when the page holds one that cannot be used.
+ */
 export interface ImportMapRead {
   map: ImportMap | null;
   error: string | null;
@@ -541,15 +543,19 @@ function setOwn<T>(o: Record<string, T>, key: string, value: T): void {
   Object.defineProperty(o, key, { value, enumerable: true, writable: true, configurable: true });
 }
 
-/** The entry's single import map, parsed, or why there is none. A null value is kept: it blocks its specifier. */
+/**
+ * The page's import map, parsed: none (map and error null) when the page holds no <script type="importmap">, else
+ * its one map, or why it cannot be used (a second map, text that is not JSON, or a shape an import map does not have).
+ * "imports" and "scopes" are each optional; a null value is kept: it blocks its specifier.
+ */
 export function importMapOf(facts: HtmlFacts): ImportMapRead {
-  if (facts.importMaps.length === 0) return { map: null, error: 'index.html holds no <script type="importmap">' };
-  if (facts.importMaps.length > 1) return { map: null, error: `index.html holds ${facts.importMaps.length} import maps: a page holds one` };
+  if (facts.importMaps.length === 0) return { map: null, error: null };
+  if (facts.importMaps.length > 1) return { map: null, error: `index.html holds ${facts.importMaps.length} import maps: a page holds one at most` };
   const only = facts.importMaps[0]!;
   if (only.error !== null) return { map: null, error: `index.html's import map is not JSON (${only.error})` };
   if (!isObject(only.value)) return { map: null, error: 'index.html\'s import map is not a JSON object' };
-  const importsRaw = only.value.imports;
-  if (!isObject(importsRaw)) return { map: null, error: 'index.html\'s import map holds no "imports" object' };
+  const importsRaw = only.value.imports ?? {};
+  if (!isObject(importsRaw)) return { map: null, error: 'index.html\'s import map holds an "imports" that is not an object' };
   const imports: Record<string, string | null> = {};
   for (const [key, value] of Object.entries(importsRaw)) {
     if (value !== null && typeof value !== 'string') return { map: null, error: `index.html's import map maps ${JSON.stringify(key)} to no string` };
@@ -582,7 +588,7 @@ export function isRelativeRef(ref: string): boolean {
 
 /**
  * Whether a module specifier is relative in JavaScript's sense: it starts with ./ or ../ (or is . or ..). A
- * specifier like `three` or `main.js` is bare: a browser resolves it through the import map or fails, it never
+ * specifier like `phaser` or `main.js` is bare: a browser resolves it through the import map or fails, it never
  * loads a file beside the importer. isRelativeRef answers for a URL reference (an attribute or an import-map value),
  * where `main.js` is relative to the page.
  */
@@ -863,14 +869,42 @@ export interface GameSource {
   bytes: Uint8Array;
 }
 
+/** The JavaScript MIME types (the HTML standard's list, by essence) that make a <script> a classic script. */
+const CLASSIC_SCRIPT_TYPES = new Set([
+  'application/ecmascript',
+  'application/javascript',
+  'application/x-ecmascript',
+  'application/x-javascript',
+  'text/ecmascript',
+  'text/javascript',
+  'text/javascript1.0',
+  'text/javascript1.1',
+  'text/javascript1.2',
+  'text/javascript1.3',
+  'text/javascript1.4',
+  'text/javascript1.5',
+  'text/jscript',
+  'text/livescript',
+  'text/x-ecmascript',
+  'text/x-javascript',
+]);
+
+/** Whether a <script>'s type (htmlFacts lowercases and trims it) makes it a classic script: none, or a JavaScript MIME type. */
+function isClassicScript(type: string): boolean {
+  return type === '' || CLASSIC_SCRIPT_TYPES.has(type.split(';')[0]!.trim());
+}
+
 /**
- * The source JS modules of a game in the order a depth-first walk of static imports reaches them from
- * index.html's module scripts: each <script type="module"> in document order, its src resolved relative to
- * index.html or its inline text's imports so resolved, then each reached module's own imports in source order,
- * the first time a path is reached. Specifiers are resolved relative to the importer or through the page's import
- * map (the importing module's matching scope's entry or the top-level one; a value resolves against index.html); a
- * specifier that resolves to no source JS module is skipped, and a module reached once is never walked twice.
- * `sources` is every source file of game/ (index.html included, which is never in the result).
+ * The source JS files of a game in the order the page loads them: index.html's scripts in document order, a classic
+ * script's src (none, or a JavaScript MIME type: <script src="game.js">) where it stands, and a module script
+ * (<script type="module">), its src or its inline text's imports, followed by a depth-first walk of static imports,
+ * each reached module's own imports in source order, the first time a path is reached. A classic script's src is
+ * resolved relative to index.html, and its text is not walked (a classic script has no static imports); a module's
+ * specifiers are resolved relative to the importer or through the page's import map (the importing module's
+ * matching scope's entry or the top-level one; a value resolves against index.html). A reference that resolves to
+ * no source JS file is skipped, a script of another type (a shader's text, JSON data) is passed over, and a file
+ * reached once is never listed or walked twice. `sources` is every source file of game/ (index.html included, which
+ * is never in the result).
  */
 export function importOrder(sources: readonly GameSource[], facts: HtmlFacts): string[] {
   const byPath = new Map(sources.map((s) => [s.path, s]));
@@ -881,17 +915,25 @@ export function importOrder(sources: readonly GameSource[], facts: HtmlFacts): s
   };
   const order: string[] = [];
   const seen = new Set<string>();
-  const visit = (path: string): void => {
+  const visit = (path: string, walk = true): void => {
     if (seen.has(path) || !MODULE_NAME.test(path) || !byPath.has(path)) return;
     seen.add(path);
     order.push(path);
+    if (!walk) return;
     for (const specifier of sourceImports(textOf(path))) {
       const target = resolveSpecifier(specifier, path, map);
       if (target !== null) visit(target);
     }
   };
   for (const script of facts.scripts) {
-    if (script.type !== 'module') continue;
+    if (script.type !== 'module') {
+      // A classic script loads its src where it stands and imports nothing statically; an import map does not apply.
+      if (isClassicScript(script.type) && script.src !== null && isRelativeRef(script.src)) {
+        const target = resolveGamePath(script.src, INDEX_HTML);
+        if (target !== null) visit(target, false);
+      }
+      continue;
+    }
     if (script.src !== null) {
       // A script's src is a URL reference, not a module specifier: `main.js` is relative to the page.
       const target = isRelativeRef(script.src) ? resolveGamePath(script.src, INDEX_HTML) : resolveSpecifier(script.src, INDEX_HTML, map);
@@ -949,7 +991,7 @@ const extensionOf = (path: string): string => {
 };
 
 /** The `## Game` block's lines: what game/ holds, by class, with the totals (no source text). */
-function gameBlockLines(tree: GameTree, threePath: string | null, threeBytes: number, importValue: string | null): string[] {
+function gameBlockLines(tree: GameTree): string[] {
   const source = tree.files.filter((f) => f.cls === 'source');
   const vendored = tree.files.filter((f) => f.cls === 'vendored');
   const assets = tree.files.filter((f) => f.cls === 'asset');
@@ -957,8 +999,6 @@ function gameBlockLines(tree: GameTree, threePath: string | null, threeBytes: nu
   const lines = [
     '## Game',
     '',
-    threePath === null ? `three.js ${THREE_VERSION}: not found (no import map "three" naming a file of game/)` : `three.js ${THREE_VERSION}: game/${threePath} (${threeBytes} bytes)`,
-    `Import map "three" → ${importValue ?? '(no import map)'}`,
     `Source files: ${source.length} (${sum(source)} bytes)`,
     `Vendored files: ${vendored.length} (${sum(vendored)} bytes)`,
   ];
@@ -1027,9 +1067,9 @@ function sourceHead(heading: string, code: { norm: Uint8Array; text: string; fen
 /**
  * The dossier (makefun/dossier/v1, contracts/dossier.ts) of an entry directory, as canonical JSON bytes:
  * `dir/game/`'s sources and `dir/screenshots/`'s PNG and JPEG files (names starting with '.' skipped). `images` are
- * the screenshots in name order, the first the cover; `text` is a "## Game" block (the three.js module found, the
- * import map's "three" value, the source, vendored and asset counts and the totals) then "## Sources", index.html
- * first, then the source JS modules in importOrder's order, then the other source files by path, each under a
+ * the screenshots in name order, the first the cover; `text` is a "## Game" block (the source, vendored and asset
+ * counts and the totals) then "## Sources", index.html first, then the source JS files in importOrder's order,
+ * then the other source files by path, each under a
  * header line naming its path, lines and bytes and then its text in a fence. The text holds at most
  * `caps.text_max_bytes` UTF-8 bytes: every source that fits goes in whole, in that order; the first that does not
  * goes in up to its last complete line that fits (its fence closed, then a line naming how many of its lines are not
@@ -1066,29 +1106,6 @@ export function buildDossier(dir: string, caps: DossierCaps): Uint8Array {
   const tree = readGameTree(gameDir, gameCaps);
   const htmlBytes = readIndexHtml(gameDir, tree);
   const html = htmlFacts(text(htmlBytes));
-  const mapped = importMapOf(html);
-  const importValue = mapped.map !== null && Object.hasOwn(mapped.map.imports, 'three') ? mapped.map.imports['three']! : null;
-
-  // The three.js module the import map names, when it names one inside game/; else one the tree holds by name.
-  let threePath: string | null = null;
-  let threeBytes = 0;
-  if (importValue !== null && isRelativeRef(importValue)) {
-    const target = resolveGamePath(importValue, INDEX_HTML);
-    if (target !== null) {
-      const file = tree.files.find((f) => f.path === target);
-      if (file !== undefined) {
-        threePath = file.path;
-        threeBytes = file.bytes;
-      }
-    }
-  }
-  if (threePath === null) {
-    const named = tree.files.filter((f) => f.path === THREE_MODULE_FILE || f.path.endsWith(`/${THREE_MODULE_FILE}`));
-    if (named.length === 1) {
-      threePath = named[0]!.path;
-      threeBytes = named[0]!.bytes;
-    }
-  }
 
   const sources = tree.files.filter((f) => f.cls === 'source').map((f) => ({ path: f.path, bytes: new Uint8Array(readFileSync(join(gameDir, f.path))) }));
   const byPath = new Map(sources.map((s) => [s.path, s]));
@@ -1144,7 +1161,7 @@ export function buildDossier(dir: string, caps: DossierCaps): Uint8Array {
     return { name, media_type, sha256: sha256Hex(bytes), base64: Buffer.from(bytes).toString('base64') };
   });
 
-  const head = [...gameBlockLines(tree, threePath, threeBytes, importValue), '', '## Sources', '', ''].join('\n');
+  const head = [...gameBlockLines(tree), '', '## Sources', '', ''].join('\n');
   const sections = order.map((path) => {
     const code = codeOf(path);
     const lines = code === null ? 0 : code.lines;
